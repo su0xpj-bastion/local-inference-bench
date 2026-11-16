@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "target": "live",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "model": "qwen2.5:1.5b",
+    "model_b": null,
+    "profile": "ollama-m1-8gb",
+    "faults": "",
+    "requests": 4,
+    "seconds": 7.589441958349198,
+    "host": {
+      "os": "Darwin 25.6.0",
+      "machine": "arm64",
+      "python": "3.12.4",
+      "cpu": "Apple M1",
+      "ram_gb": 8
+    },
+    "verdict": "FAIL"
+  },
+  "checks": [
+    {
+      "area": "contract",
+      "name": "usage_reported",
+      "status": "pass",
+      "detail": "usage chunk seen=True, prompt=36, completion=32, content chunks=32",
+      "gated": true,
+      "metrics": {}
+    },
+    {
+      "area": "context",
+      "name": "context_integrity",
+      "status": "fail",
+      "detail": "~4,441-token prompt (calibrated 5.5 chars/token) -> prompt_tokens 2,050 (46%); needle at the start recalled: False; prompt was cut: check the engine's context-length setting",
+      "gated": true,
+      "metrics": {
+        "expected": 4441.035934868051,
+        "prompt_tokens": 2050,
+        "recalled": false
+      }
+    }
+  ]
+}

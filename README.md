@@ -10,34 +10,39 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
     --model qwen2.5:1.5b                                               # see docs/LIVE.md
 ```
 
-> **Status:** CI runs everything against the mock engine. **Live runs are recorded** for `qwen2.5:1.5b` on Ollama 0.17 on an 8 GB M1 MacBook (below and in [`results/`](results/)). The "Healthy mock run" section further down is mock data.
+> **Status:** CI runs everything against the mock engine. **Live runs are recorded** on an 8 GB M1 MacBook with Ollama 0.17 and 0.40 (below, raw reports in [`results/`](results/)). The "Healthy mock run" section further down is mock data.
 
-## Live run: qwen2.5:1.5b on Ollama, M1 with 8 GB (2026-11-16)
+## Live runs on an M1 with 8 GB (2026-11-16)
 
-Two full runs, about 70 s each, agreed within ~2%:
+All with `OLLAMA_NUM_PARALLEL=4` and `OLLAMA_CONTEXT_LENGTH=16384`. Each full run takes about 70 s; every check passed.
 
-| Measure | Result |
-|---|---|
-| Decode | **37–38 tok/s**; time between tokens p50 26 ms, p95 29 ms |
-| Prefill | **≈ 490 tok/s** (TTFT 0.5 s at 240 prompt tokens, 3.8 s at 1,865) |
-| Warm TTFT | p50 **93–95 ms**, p95 105 ms; first request 148–169 ms |
-| Prefix cache | same 1.5K-token system prompt twice: **3.1 s → 0.2 s** (0.07x) |
-| Concurrency | 1 → 4 parallel requests: 35 → 65 tok/s aggregate (**1.87x**); TTFT p50 143 → 533 ms |
-| Sustained decode | 6 back-to-back generations, no slowdown (thermal throttling not seen at this size) |
-| Determinism | T=0 with a seed: identical output 3 of 3 |
+| Measure | qwen2.5:1.5b, Ollama 0.17 | qwen2.5:1.5b, Ollama 0.40 | gemma3:1b Q8_0, Ollama 0.40 |
+|---|---|---|---|
+| Decode tok/s (median) | 37–38 (2 runs) | 41 | **49** |
+| Time between tokens p50 / p95 | 26 / 29 ms | 23 / 43 ms | 20 / 23 ms |
+| Prefill tok/s | ≈ 490 | ≈ 483 | **≈ 1,009** |
+| Warm TTFT p50 | 95 ms | 36 ms | 43 ms |
+| Prefix cache, same 1.5K-token prompt twice | 3.1 s → 0.2 s, `cached_tokens` **0** | 2.8 s → 0.36 s, `cached_tokens` 1,491 | 1.3 s → 0.07 s, `cached_tokens` 1,493 |
+| Aggregate throughput, 4 parallel vs 1 | 1.87x | 2.14x | 2.44x |
+| T=0 + seed, 3 calls | identical | identical | identical |
+
+**Version upgrade, same model:** going from Ollama 0.17 to 0.40, warm TTFT dropped from 95 to 36 ms, parallel scaling rose from 1.87x to 2.14x, and the prefix cache became visible in usage data (0.17 reported `cached_tokens: 0` even when the cache cut TTFT 15x). Decode got slightly faster but noisier (TBT p95 29 → 43 ms; one dip to 36 tok/s in the sustained run).
+
+**4-bit vs 8-bit Gemma 3 1B** (`quant_delta`, 40 exact-answer items): Q8_0 29/40, Q4_K_M 29/40, no drop; two items went right → wrong and two wrong → right, so the difference is noise at this size. The 4-bit build is 806 MB against 1.1 GB.
 
 ### Finding: Ollama's default context silently drops the start of long prompts
 
-The model supports a 32K context, but Ollama's default window here is **4,096 tokens**. A ~4.4K-token prompt returned HTTP 200 with `prompt_tokens` capped at exactly 4,096, and a code planted at the start of the prompt was gone from the answer. At ~8.9K tokens the same: capped at 4,096, 46% of the prompt seen. No error, no warning.
+Qwen 2.5 1.5B and Gemma 3 1B both support a 32K context, but Ollama's default window on this machine is much smaller, and a longer prompt is cut from the **front** with an HTTP 200 and no error in the API response. A code planted at the start of the prompt is gone from the answer.
 
-| Ollama setting | 4.4K-token prompt | 8.9K-token prompt |
-|---|---|---|
-| default | `prompt_tokens` 4,096 (92%), code lost ❌ | 4,096 (46%), code lost ❌ |
-| `OLLAMA_CONTEXT_LENGTH=16384` | 4,465 (101%), code recalled ✅ | 8,839 (100%), code recalled ✅ |
+| Ollama | Setting | ~4.4K-token prompt | ~8.9K-token prompt |
+|---|---|---|---|
+| 0.17 | default | `prompt_tokens` 4,096 (92%), code lost ❌ | 4,096 (46%), code lost ❌ |
+| 0.40 | default | `prompt_tokens` **2,050** (46%), code lost ❌ | |
+| 0.17 / 0.40 | `OLLAMA_CONTEXT_LENGTH=16384` | 100–102%, code recalled ✅ | 8,839 (100%), code recalled ✅ |
 
-`context_integrity` now probes at 6,000 tokens on the live profile so it catches this default.
+The upgrade made the default **stricter**, not looser, on this 8 GB machine. The only trace is in the server's own log: `WARN msg="truncating input prompt" limit=2050 prompt=4466`. A client calling the OpenAI-compatible API never sees it, which is exactly why `context_integrity` checks `prompt_tokens` against a calibrated expectation and plants a code at the start. The live profile probes at 6,000 tokens so the check catches the default.
 
-Two smaller observations: the prefix cache clearly works (TTFT drops 15x) but Ollama reports `cached_tokens: 0`, so cache hits are invisible in usage data; and `gemma3:1b` could not be pulled at all on Ollama 0.17 (the registry requires a newer version), which is why this run uses Qwen.
+Also: `gemma3:1b` couldn't be pulled at all on Ollama 0.17 (the registry requires a newer version), which is why the first runs used Qwen.
 
 ### A harness bug the live run found
 
@@ -98,7 +103,7 @@ docs/LIVE.md            running against Ollama, llama.cpp, MLX or vLLM
 
 ## Where this stops
 
-- **One live model so far.** The `ollama-m1-8gb` numbers come from two runs of one 1.5B model; performance is reported, not gated, on live until more runs set thresholds. `quant_delta` has no live result yet (it needs a second quantization of the same model).
+- **Two small models, one machine.** Live numbers come from 1–1.5B models on one 8 GB M1; performance is reported, not gated, on live until more runs set thresholds. The 40-item quality set shows a large quantization regression, not a 1–2 point one.
 - **One machine, small load.** Concurrency goes to 4. This measures the shape of a laptop or workstation engine, not datacenter capacity; for that see [llm-serving-validation](https://github.com/su0xpj-bastion/llm-serving-validation) and [inference-endpoint-scenarios](https://github.com/su0xpj-bastion/inference-endpoint-scenarios).
 - **Client-side timing.** TTFT includes the local HTTP hop, which on localhost is well under a millisecond.
 - **Token counts on live depend on the model's tokenizer.** `prefill_scaling` uses the engine's own `prompt_tokens` for its x-axis; `context_integrity` estimates the expected count at ~4 characters per token (set `chars_per_token` per model in `slo.json`).

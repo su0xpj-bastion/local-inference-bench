@@ -7,8 +7,8 @@ Nothing here needs an API key or costs money; it needs disk space for the model 
 
 ```bash
 OLLAMA_NUM_PARALLEL=4 OLLAMA_CONTEXT_LENGTH=16384 ollama serve &   # OpenAI-compatible API on :11434/v1
-ollama pull qwen2.5:1.5b                        # ~1 GB; what results/ was recorded with
-# for quant_delta, also pull a second quantization of the same model (check `ollama show` for tags)
+ollama pull gemma3:1b                           # Q4_K_M, 806 MB (needs a recent Ollama)
+ollama pull gemma3:1b-it-q8_0                   # Q8_0, 1.1 GB: the second build for quant_delta
 ```
 
 On an 8 GB machine stay at 1-4B parameters; a model that doesn't fit in memory swaps, and
@@ -27,7 +27,7 @@ Other engines, same command below with a different `--base-url`:
 ```bash
 .venv/bin/python -m localbench run --target live \
     --base-url http://127.0.0.1:11434/v1 \
-    --model qwen2.5:1.5b \
+    --model gemma3:1b-it-q8_0 --model-b gemma3:1b \
     --out results/<date>-ollama-<version>-<model>
 ```
 
@@ -40,7 +40,7 @@ thresholds are calibrated from repeated runs. Contract, context and quantization
   A gain near 1.0x means requests queue.
 - **context_integrity**: if the engine's context length is smaller than the prompt, the start of
   the prompt is dropped without an error. On Ollama 0.17 the default window is 4,096 tokens even for
-  models that support 32K; start the server with `OLLAMA_CONTEXT_LENGTH` set (see the README finding).
+  models that support 32K, and 0.40 cut a prompt to about 2,050 tokens on an 8 GB machine; start the server with `OLLAMA_CONTEXT_LENGTH` set (see the README finding).
 - **warm_ttft**: a first request that is seconds slower than the rest is the model loading.
   If every request is that slow, the model is being unloaded between requests (keep-alive).
 - **quant_delta**: the 4-bit vs 8-bit accuracy difference on the same 40 items.

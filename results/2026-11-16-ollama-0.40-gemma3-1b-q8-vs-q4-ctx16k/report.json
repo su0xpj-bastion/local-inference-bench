@@ -1,0 +1,172 @@
+{
+  "meta": {
+    "target": "live",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "model": "gemma3:1b-it-q8_0",
+    "model_b": "gemma3:1b",
+    "profile": "ollama-m1-8gb",
+    "faults": "",
+    "requests": 116,
+    "seconds": 53.247237666044384,
+    "host": {
+      "os": "Darwin 25.6.0",
+      "machine": "arm64",
+      "python": "3.12.4",
+      "cpu": "Apple M1",
+      "ram_gb": 8
+    },
+    "verdict": "PASS"
+  },
+  "checks": [
+    {
+      "area": "contract",
+      "name": "usage_reported",
+      "status": "pass",
+      "detail": "usage chunk seen=True, prompt=16, completion=32, content chunks=32",
+      "gated": true,
+      "metrics": {}
+    },
+    {
+      "area": "contract",
+      "name": "max_tokens_honoured",
+      "status": "pass",
+      "detail": "max_tokens=16 -> 16 tokens, finish_reason=length",
+      "gated": true,
+      "metrics": {}
+    },
+    {
+      "area": "performance",
+      "name": "decode_sustained",
+      "status": "pass",
+      "detail": "tok/s over 6 back-to-back generations [50, 51, 52, 52, 51, 51]: 1% faster from first to last (cap 25% slower)",
+      "gated": false,
+      "metrics": {
+        "tps": [
+          50.42941308951203,
+          51.08876318189871,
+          51.69129381457705,
+          51.59037630540293,
+          51.05442729480414,
+          51.42450734888229
+        ],
+        "drop": -0.009463904963255887
+      }
+    },
+    {
+      "area": "performance",
+      "name": "warm_ttft",
+      "status": "pass",
+      "detail": "first request 54 ms; warm p50 43 ms, p95 45 ms (cap p50 1000 ms)",
+      "gated": false,
+      "metrics": {
+        "first_ms": 53.62754222005606,
+        "warm_p50_ms": 42.936916928738356,
+        "warm_p95_ms": 45.12654198333621
+      }
+    },
+    {
+      "area": "performance",
+      "name": "prefill_scaling",
+      "status": "pass",
+      "detail": "TTFT by prompt tokens [(222, 219), (772, 720), (1846, 1829)] ms -> prefill \u2248 1,009 tok/s (floor 200)",
+      "gated": false,
+      "metrics": {
+        "prefill_tps": 1008.5203362950627,
+        "points": [
+          [
+            222,
+            0.21881629200652242
+          ],
+          [
+            772,
+            0.7195612080395222
+          ],
+          [
+            1846,
+            1.8290961659513414
+          ]
+        ]
+      }
+    },
+    {
+      "area": "performance",
+      "name": "decode_rate",
+      "status": "pass",
+      "detail": "decode 49 tok/s median of 3 (floor 15); TBT p50 19.9 ms, p95 22.7 ms",
+      "gated": false,
+      "metrics": {
+        "decode_tps": 49.0405411698344,
+        "tbt_p50_ms": 19.923083018511534,
+        "tbt_p95_ms": 22.70829165354371
+      }
+    },
+    {
+      "area": "performance",
+      "name": "prefix_cache",
+      "status": "pass",
+      "detail": "same 1499-token system prompt: TTFT 1339 ms -> 73 ms (0.05x, cap 0.6x); cached_tokens reported 1493",
+      "gated": false,
+      "metrics": {
+        "ratio": 0.05445268590014337,
+        "cached_tokens": 1493
+      }
+    },
+    {
+      "area": "performance",
+      "name": "concurrency",
+      "status": "pass",
+      "detail": "c=1: 44 tok/s, TTFT p50 62 ms, c=2: 80 tok/s, TTFT p50 95 ms, c=4: 108 tok/s, TTFT p50 169 ms; c=4 gives 2.44x aggregate throughput (floor 1.3x)",
+      "gated": false,
+      "metrics": {
+        "levels": {
+          "1": {
+            "agg_tps": 44.294998808973055,
+            "ttft_p50_ms": 61.81574985384941
+          },
+          "2": {
+            "agg_tps": 80.39650549997069,
+            "ttft_p50_ms": 95.17829166725278
+          },
+          "4": {
+            "agg_tps": 108.24439827173491,
+            "ttft_p50_ms": 169.1988967359066
+          }
+        },
+        "gain": 2.443716021724044
+      }
+    },
+    {
+      "area": "context",
+      "name": "context_integrity",
+      "status": "pass",
+      "detail": "~4,371-token prompt (calibrated 5.6 chars/token) -> prompt_tokens 4,448 (102%); needle at the start recalled: True",
+      "gated": true,
+      "metrics": {
+        "expected": 4371.245367770915,
+        "prompt_tokens": 4448,
+        "recalled": true
+      }
+    },
+    {
+      "area": "quality",
+      "name": "determinism",
+      "status": "pass",
+      "detail": "T=0, seed=11, 3 calls: 1 distinct output(s)",
+      "gated": false,
+      "metrics": {}
+    },
+    {
+      "area": "quality",
+      "name": "quant_delta",
+      "status": "pass",
+      "detail": "gemma3:1b-it-q8_0: 72% vs gemma3:1b: 72% on 40 exact-answer items (+0.0 pts drop, cap 7.5); 2 items right->wrong",
+      "gated": true,
+      "metrics": {
+        "acc_a": 0.725,
+        "acc_b": 0.725,
+        "drop_pts": 0.0,
+        "flipped": 2
+      }
+    }
+  ]
+}
