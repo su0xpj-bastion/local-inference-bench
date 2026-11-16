@@ -180,13 +180,30 @@ def concurrency(ctx: Ctx) -> Check:
 
 # ---------------- context and quality ----------------
 
+def _expected_tokens(ctx: Ctx, prompt: str) -> tuple[float, str]:
+    """Expected prompt_tokens for `prompt`, measured on this model's own tokenizer.
+
+    Two short calls of known length give the tokenizer's characters-per-token on this filler
+    (the slope) and the chat template's fixed overhead (the intercept), so no guess about the
+    tokenizer is needed. Falls back to ~4 characters per token if usage isn't reported.
+    """
+    short, longer = text_of(150), text_of(600)
+    a = ctx.chat(short + "\nReply with one word.", max_tokens=1).prompt_tokens
+    b = ctx.chat(longer + "\nReply with one word.", max_tokens=1).prompt_tokens
+    if not a or not b or b <= a:
+        return len(prompt) / 4, "assumed 4 chars/token"
+    per_char = (b - a) / (len(longer) - len(short))
+    overhead = a - per_char * len(short + "\nReply with one word.")
+    return overhead + per_char * len(prompt), f"calibrated {1 / per_char:.1f} chars/token"
+
+
 def context_integrity(ctx: Ctx) -> Check:
     n = ctx.slo["context_probe_tokens"]
     code = uuid.uuid4().hex[:6].upper()
     prompt = (f"NEEDLE: The secret code is {code}. Remember it.\n" + text_of(n)
               + "\nWhat is the secret code? Reply with only the code.")
     c = ctx.chat(prompt, max_tokens=12)
-    expected = len(prompt) // 4 if ctx.slo.get("chars_per_token") is None else len(prompt) / ctx.slo["chars_per_token"]
+    expected, how = _expected_tokens(ctx, prompt)
     seen = c.prompt_tokens
     recalled = code.lower() in c.content.lower()
     if seen is None:                       # no usage: only the needle can tell
@@ -196,7 +213,7 @@ def context_integrity(ctx: Ctx) -> Check:
         count = f"prompt_tokens {seen:,} ({seen / max(expected, 1):.0%})"
     ok = tokens_ok and recalled
     return Check("context", "context_integrity", "pass" if ok else "fail",
-                 f"~{expected:,.0f}-token prompt -> {count}; needle at the start recalled: {recalled}"
+                 f"~{expected:,.0f}-token prompt ({how}) -> {count}; needle at the start recalled: {recalled}"
                  + ("" if ok else "; prompt was cut: check the engine's context-length setting"),
                  metrics={"expected": expected, "prompt_tokens": seen, "recalled": recalled})
 
