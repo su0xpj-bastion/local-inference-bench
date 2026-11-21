@@ -17,6 +17,11 @@ Faults (comma-separated, via --faults or MOCK_FAULTS) break one of those on purp
   keep_alive_zero     the model is unloaded after every request, so every request is a cold start
   usage_missing       no usage chunk even with include_usage
   ignore_max_tokens   generation ignores max_tokens
+
+Conditions (not faults: a correct harness must still pass with them on):
+
+  dense_tokenizer     ~5.5 characters per token instead of 4, like Qwen 2.5 on English filler
+                      (reproduces INC-002 in docs/ops: a fixed 4-chars/token estimate false-alarms)
 """
 from __future__ import annotations
 
@@ -43,13 +48,17 @@ WORDS = ("the", "model", "runs", "locally", "on", "one", "machine", "and", "stre
          "quickly", "while", "the", "cache", "keeps", "the", "prompt", "warm")
 
 
-def ntokens(text: str) -> int:
-    return max(1, len(text) // 4)
+DENSE_CHARS_PER_TOKEN = 5.5
+
+
+def ntokens(text: str, chars_per_token: float = 4) -> int:
+    return max(1, int(len(text) // chars_per_token))
 
 
 class Engine:
     def __init__(self, faults: set[str]):
         self.faults = faults
+        self.cpt = DENSE_CHARS_PER_TOKEN if "dense_tokenizer" in faults else 4
         self.lock = threading.Lock()
         self.slots = threading.Semaphore(1 if "serialized" in faults else SLOTS)
         self.active = 0
@@ -65,7 +74,7 @@ class Engine:
         cache = self.cache[model]
         hit_run = "no_prefix_cache" not in self.faults
         for m in messages:
-            t = ntokens(m.get("content") or "")
+            t = ntokens(m.get("content") or "", self.cpt)
             key = hashlib.sha1((key + m["role"] + (m.get("content") or "")).encode()).hexdigest()
             if hit_run and key in cache:
                 cached += t
@@ -135,9 +144,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(404, {"error": {"message": f"model '{model}' not found", "type": "not_found"}})
         messages = req.get("messages") or []
         if "context_truncation" in eng.faults:
-            messages = _truncate(messages, TRUNCATE_AT)
+            messages = _truncate(messages, TRUNCATE_AT, eng.cpt)
         prompt = "\n".join(m.get("content") or "" for m in messages)
-        if ntokens(prompt) > CONTEXT_WINDOW:
+        if ntokens(prompt, eng.cpt) > CONTEXT_WINDOW:
             return self._json(400, {"error": {"message": "prompt exceeds context window", "type": "invalid_request_error"}})
         max_tokens = req.get("max_tokens") or req.get("max_completion_tokens") or 64
         temperature = float(req.get("temperature", 1.0))
@@ -209,16 +218,16 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
 
-def _truncate(messages: list[dict], limit: int) -> list[dict]:
+def _truncate(messages: list[dict], limit: int, chars_per_token: float = 4) -> list[dict]:
     """Keep the LAST `limit` tokens, the way a too-small context setting silently drops the start."""
     out, budget = [], limit
     for m in reversed(messages):
         c = m.get("content") or ""
-        if ntokens(c) <= budget:
+        if ntokens(c, chars_per_token) <= budget:
             out.append(m)
-            budget -= ntokens(c)
+            budget -= ntokens(c, chars_per_token)
         else:
-            out.append({**m, "content": c[-budget * 4:]})
+            out.append({**m, "content": c[-int(budget * chars_per_token):]})
             break
     return list(reversed(out))
 

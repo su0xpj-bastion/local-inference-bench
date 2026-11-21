@@ -48,6 +48,15 @@ Also: `gemma3:1b` couldn't be pulled at all on Ollama 0.17 (the registry require
 
 The first live run failed `context_integrity` on a prompt that was **not** truncated: the check estimated tokens at 4 characters per token, and Qwen's tokenizer averages 5.5 on this text. The estimate is now calibrated on the model itself (two short prompts give the tokenizer's characters-per-token and the chat template's fixed overhead); expected and actual counts now agree within 1%.
 
+## Operations: incidents, SLOs, and action items that stay closed
+
+The two live findings above are written up as incidents in [`docs/ops/`](docs/ops/), run the way a production reliability team would:
+
+- **Post-mortems:** [INC-001](docs/ops/INC-001-silent-context-truncation.md) (Ollama silently drops the start of long prompts) and [INC-002](docs/ops/INC-002-false-truncation-alarm.md) (our own detector raised a false alarm on a denser tokenizer, fixed without loosening the threshold).
+- **[SLOs](docs/ops/SLO.md)** for the detector itself: 100% fault coverage, zero false alarms, zero silent truncations.
+- **[Runbook](docs/ops/RUNBOOK.md)**: triage a `context_integrity` failure in five minutes, fix, verify.
+- **[Action tracker](docs/ops/actions.json)**: every closed action names the regression test that proves it. `tools/ops_review.py` runs those tests on every push; if a fix is undone, the action shows as **REOPENED** and CI fails. Open actions need an owner and a due date and are flagged when overdue. Latest review: [`docs/ops/REVIEW.md`](docs/ops/REVIEW.md).
+
 ## The checks
 
 | Area | Check | What it proves | Fault it catches |
@@ -96,7 +105,9 @@ localbench/client.py    one streamed request, timed per content chunk; 429-only 
 localbench/checks.py    the 11 checks
 localbench/quality.py   40 exact-answer items + grading (no LLM judge)
 localbench/cli.py       run, report.md + report.json, CI job summary
-mockserve/server.py     mock engine + 10 injectable faults
+mockserve/server.py     mock engine + 10 injectable faults + dense_tokenizer condition
+tools/ops_review.py     ops review: incidents, actions proven by tests, live evidence
+docs/ops/               post-mortems, SLOs, runbook, action tracker
 slo.json                mock profile (gated) and ollama-m1-8gb profile (performance not gated yet)
 docs/LIVE.md            running against Ollama, llama.cpp, MLX or vLLM
 ```

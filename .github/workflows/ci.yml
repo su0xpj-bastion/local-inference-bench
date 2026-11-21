@@ -18,6 +18,11 @@ jobs:
           if python -m localbench run --target mock --faults serialized,context_truncation --out reports/faulted; then
             echo "faulted run passed: a detector is broken"; exit 1
           fi
+      - name: ops review (a closed action whose test fails is reopened and fails the build)
+        run: |
+          mkdir -p reports
+          python tools/ops_review.py --out reports/ops-review.md
+          cat reports/ops-review.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

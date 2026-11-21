@@ -215,7 +215,8 @@ def context_integrity(ctx: Ctx) -> Check:
     return Check("context", "context_integrity", "pass" if ok else "fail",
                  f"~{expected:,.0f}-token prompt ({how}) -> {count}; needle at the start recalled: {recalled}"
                  + ("" if ok else "; prompt was cut: check the engine's context-length setting"),
-                 metrics={"expected": expected, "prompt_tokens": seen, "recalled": recalled})
+                 metrics={"expected": expected, "prompt_tokens": seen, "recalled": recalled,
+                          "prompt_chars": len(prompt)})
 
 
 def determinism(ctx: Ctx) -> Check:
